@@ -1,0 +1,12 @@
+# Build related
+*.class
+bin/
+
+# Eclipse-related
+.settings/
+.recommenders/
+.classpath
+.project
+
+# Dev journal
+journal.md
