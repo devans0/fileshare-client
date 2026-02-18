@@ -50,6 +50,14 @@ public class FileRequester {
 			// FileTransferHandler will provide an 8-byte header that indicates the size of the
 			// incoming file prior to the file's bytes
 			long fileSize = in.readLong();
+
+			// Check if there was an issue on the remote peer; this can be extended to an error-code
+			// system in the future.
+			if (fileSize < 1) {
+				throw new IOException("Remote peer error: could not retrieve " + targetFileName);
+			}
+			
+			// File has been found
 			System.out.println("[P2P] " + targetFileName + ": peer reported file size = " + fileSize + " bytes");
 			
 			// Prepare the local file path
@@ -59,6 +67,7 @@ public class FileRequester {
 			System.out.println("[P2P] " + targetFileName + ": receiving data...");
 			long bytesCopied = Files.copy(in, downloadPath, StandardCopyOption.REPLACE_EXISTING);
 			
+			// Check that the reported size matches the actual retrieved file
 			if (bytesCopied != fileSize) {
 				System.err.println("[WARN] " + targetFileName + " transfer mismatch! Expected " 
 									+ fileSize + " bytes; received " 

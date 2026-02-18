@@ -13,19 +13,20 @@ package fileshare.transport;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import fileshare.client.ShareManager;
+
 public class PeerServer implements Runnable {
 	private final int port;
-	private final Path shareDir;
+	private final ShareManager shareManager;
 	private ExecutorService threadPool;
 	
-	public PeerServer(int port, Path shareDir, int maxConnections) {
+	public PeerServer(int port, ShareManager shareManager, int maxConnections) {
 		this.port = port;
-		this.shareDir = shareDir;
+		this.shareManager = shareManager;
 		this.threadPool = Executors.newFixedThreadPool(maxConnections);
 	} //ctor
 	
@@ -49,7 +50,7 @@ public class PeerServer implements Runnable {
 			while (!Thread.currentThread().isInterrupted()) {
 				try {
 					Socket clientSock = serverSock.accept();
-					this.threadPool.execute(new FileTransferHandler(clientSock, this.shareDir));
+					this.threadPool.execute(new FileTransferHandler(clientSock, this.shareManager));
 				} catch (IOException ioe) {
 					System.err.println("[P2P] Connection accept error: " + ioe.getMessage());
 				}

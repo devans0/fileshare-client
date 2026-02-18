@@ -9,8 +9,12 @@
 
 package fileshare.util;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Properties;
 
 public class ConfigLoader {
@@ -28,17 +32,14 @@ public class ConfigLoader {
 	 * that it is properly placed where Wildfly may find it.
 	 */
 	static {
-		try (InputStream is = Thread.currentThread().getContextClassLoader()
-								.getResourceAsStream("fileservice.properties")) {
-			
-			if (is != null) {
+		File configFile = new File("client.properties");
+		if (configFile.exists()) {
+			try (InputStream is = new FileInputStream(configFile)) {
 				props.load(is);
-			} else {
-				System.err.println("[WARN] ConfigLoader: fileservice.properties NOT FOUND in classpath");
+			} catch (IOException ioe) {
+				System.err.println("[ERROR] client.properties not found at " + configFile.getAbsolutePath());
+				ioe.printStackTrace();
 			}
-		} catch (IOException ioe) {
-			System.err.println("[ERR] ConfigLoader could not find fileservice.properties");
-			ioe.printStackTrace();
 		}
 	}
 	
@@ -55,6 +56,21 @@ public class ConfigLoader {
 	public static String getProperty(String key, String defaultValue) {
 		return props.getProperty(key, defaultValue);
 	} // getProperty
+	
+	/**
+	 * Saves a new or updated property to the properties file.
+	 * 
+	 * @param key the key of the new/updated property.
+	 * @param newVal the value of the new/updated property.
+	 */
+	public static void saveProperty(String key, String newVal) {
+		props.put(key, newVal);
+		try (OutputStream os = new FileOutputStream("client.properties")) {
+			props.store(os, "Updated by FSClient");
+		} catch (IOException ioe) {
+			System.err.println("[ERROR] ConfigLoader: failed to write properties to disk.");
+		}
+	} //saveProperty
 	
 	/**
 	 * Fetches the integer value associated with a given key
