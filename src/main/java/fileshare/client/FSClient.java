@@ -26,7 +26,7 @@
  * files for download.
  */
 
-package main.java.fileshare.client;
+package fileshare.client;
 
 import java.nio.file.Paths;
 import java.util.TimeZone;
@@ -40,9 +40,9 @@ import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import main.java.fileshare.transport.PeerServer;
-import main.java.fileshare.util.ConfigLoader;
-import main.java.fileshare.util.IdentityManager;
+import fileshare.transport.PeerServer;
+import fileshare.util.ConfigLoader;
+import fileshare.util.IdentityManager;
 
 public class FSClient {
 	// Global State

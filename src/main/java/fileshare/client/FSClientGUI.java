@@ -17,7 +17,7 @@
  * This class is instantiated on a GUI thread by FSClient and calls methods from FSClientConsumer.
  */
 
-package main.java.fileshare.client;
+package fileshare.client;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -46,8 +46,8 @@ import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.JScrollPane;
 
-import main.java.fileshare.generated.FileInfo;
-import main.java.fileshare.transport.FileRequester;
+import fileshare.generated.FileInfo;
+import fileshare.transport.FileRequester;
 
 public class FSClientGUI extends JFrame {
 

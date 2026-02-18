@@ -14,13 +14,13 @@
  * static methods to permit easy use by other objects in the client system.
  */
 
-package main.java.fileshare.client;
+package fileshare.client;
 
 import java.util.List;
 
-import main.java.fileshare.generated.FileInfo;
-import main.java.fileshare.generated.FileShareService;
-import main.java.fileshare.generated.FileShareWS;
+import fileshare.generated.FileInfo;
+import fileshare.generated.FileShareService;
+import fileshare.generated.FileShareWS;
 import jakarta.xml.ws.BindingProvider;
 
 public class FSConsumer {

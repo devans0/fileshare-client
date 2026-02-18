@@ -8,7 +8,7 @@
  * @copyright 2026 Dominic Evans
  */
 
-package main.java.fileshare.transport;
+package fileshare.transport;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -17,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import main.java.fileshare.client.ShareManager;
+import fileshare.client.ShareManager;
 
 public class PeerServer implements Runnable {
 	private final int port;

@@ -7,7 +7,7 @@
  * @copyright 2026 Dominic Evans
  */
 
-package main.java.fileshare.transport;
+package fileshare.transport;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -17,7 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-import main.java.fileshare.generated.FileInfo;
+import fileshare.generated.FileInfo;
 
 public class FileRequester {
 	

@@ -24,7 +24,7 @@
  * then the FileRequester shall immediately close the connection.
  */
 
-package main.java.fileshare.transport;
+package fileshare.transport;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -34,7 +34,7 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import main.java.fileshare.client.ShareManager;
+import fileshare.client.ShareManager;
 
 public class FileTransferHandler implements Runnable {
 	

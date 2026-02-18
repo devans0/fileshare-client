@@ -7,7 +7,7 @@
  * @copyright 2026 Dominic Evans 
  */
 
-package main.java.fileshare.util;
+package fileshare.util;
 
 import java.io.File;
 import java.io.FileInputStream;

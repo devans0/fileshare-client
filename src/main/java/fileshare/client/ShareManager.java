@@ -7,7 +7,7 @@
  * @copyright 2026 Dominic Evans
  */
 
-package main.java.fileshare.client;
+package fileshare.client;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -286,13 +286,15 @@ public class ShareManager {
 							System.out.println("[SHARE] De-listed " + p);
 						}
 					}
+					
+					System.out.println("[DEBUG] Map size: " + listedFiles.size() + " Contents: " + listedFiles.keySet());
 
 					/*
 					 * Send the heartbeat and detect if the server has lost the file listings. If
 					 * the server has reaped the listed files between heartbeats due to a delay,
 					 * then this check will cause an immediate refresh of the share directory
 					 */
-					if (!FSConsumer.keepAlive(this.peerID)) {
+					if (!listedFiles.isEmpty() && !FSConsumer.keepAlive(this.peerID)) {
 						System.out.println("[SHARE] Session lost. Attempting immediate re-sync...");
 						listedFiles.clear();
 						// Limit the number of retries to 3

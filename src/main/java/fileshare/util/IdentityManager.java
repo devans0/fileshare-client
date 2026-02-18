@@ -24,7 +24,7 @@
  * guarding the class from object instantiation.
  */
 
-package main.java.fileshare.util;
+package fileshare.util;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
