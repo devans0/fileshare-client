@@ -10,3 +10,4 @@ bin/
 
 # Dev journal
 journal.md
+/target/
