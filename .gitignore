@@ -11,3 +11,6 @@ bin/
 # Dev journal
 journal.md
 /target/
+
+# Testing Related
+sandbox/

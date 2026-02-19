@@ -235,6 +235,11 @@ public class FSClientGUI extends JFrame {
 	 * etc.
 	 */
 	private void initListeners() {
+		/* Observer for ShareManager changes */
+		this.manager.addUpdateListener(() -> {
+			SwingUtilities.invokeLater(this::updateSharedFilesList);
+		});
+
 		/* Search */
 		this.searchBtn.addActionListener(e -> handleSearch());
 		this.searchField.addActionListener(e -> this.searchBtn.doClick());
@@ -245,6 +250,14 @@ public class FSClientGUI extends JFrame {
 		this.searchFileTable.getSelectionModel().addListSelectionListener(e -> {
 			if (!e.getValueIsAdjusting()) {
 				int selectedRow = this.searchFileTable.getSelectedRow();
+				
+				// Guard against triggering this listener when the table is cleared
+				// this occurs when a new search is entered
+				if (selectedRow < 0) {
+					this.downloadBtn.setEnabled(false);
+					return;
+				}
+				
 				// Activate the download button only if there is something selected
 				// and that selection corresponds to a valid file
 				String fileID = this.searchTableModel.getValueAt(selectedRow, 0).toString();
@@ -297,7 +310,19 @@ public class FSClientGUI extends JFrame {
 			this.consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
 		});
 	} // updateConsole
-
+	
+	/**
+	 * Updates the list of shared files. Called from action listeners whenever this list
+	 * is liable to change.
+	 */
+	private void updateSharedFilesList() {
+		this.sharedFilesListModel.clear();
+		List<Path> sharedFiles = manager.getSharedFiles();
+		for (Path p : sharedFiles) {
+			this.sharedFilesListModel.addElement(p);
+		}
+	} // updateSharedFilesList
+	
 	/*
 	 * Handlers: each of these methods execute the various methods of the program.
 	 * Each is named as handle<GUIElement> indicating which GUI element they are
@@ -317,6 +342,10 @@ public class FSClientGUI extends JFrame {
 			try {
 				System.out.println("[SYS] Querying server for: " + query);
 				List<FileInfo> results = FSConsumer.searchFiles(query);
+				if (results == null) {
+					System.err.println("[SYS] Search failed.");
+					return;
+				}
 				
 				// Update UI with results
 				SwingUtilities.invokeLater(() -> {
@@ -437,6 +466,7 @@ public class FSClientGUI extends JFrame {
 		new Thread(() -> {
 			try {
 				this.manager.excludeFile(filePath);
+				System.out.println("Stopped sharing: " + filePath.getFileName());
 			} finally {
 				this.stopSharingBtn.setEnabled(false);
 			}

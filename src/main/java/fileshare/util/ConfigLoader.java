@@ -17,29 +17,45 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Properties;
 
+import fileshare.client.FSClientGUI;
+
 public class ConfigLoader {
-	private static Properties props = new Properties();
+	private static final Properties props = new Properties();
 	
-	/* 
+	/*
 	 * Initialize the ConfigLoader
 	 * 
-	 * getResourceAsStream necessary in order to properly integrate with Wildfly.
-	 * Otherwise, the configuration file will be searched for in the working directory
-	 * of the execution which will be the Wildfly home directory. This ensures
-	 * that the configuration file can be found.
-	 * 
-	 * This requires that the configuration file be found in src/main/resources so
-	 * that it is properly placed where Wildfly may find it.
+	 * This static initializer first tries to locate a properties file in the
+	 * current directory before falling back on an internal resource (when compiled
+	 * as a .jar). This allows the user to override configuration by changing the
+	 * client.properties file which resides in the root directory but the file
+	 * remains optional.
 	 */
 	static {
-		File configFile = new File("client.properties");
-		if (configFile.exists()) {
-			try (InputStream is = new FileInputStream(configFile)) {
-				props.load(is);
-			} catch (IOException ioe) {
-				System.err.println("[ERROR] client.properties not found at " + configFile.getAbsolutePath());
-				ioe.printStackTrace();
+		// Try to get the external file
+		File external = new File("client.properties");
+		
+		try {
+			if (external.exists()) {
+				try (InputStream in = new FileInputStream(external)) {
+					props.load(in);
+					System.out.println("[CONFIG] Loaded external client.properties");
+				}
+			} else {
+				// Fallback to the internal file
+				try (InputStream in = ConfigLoader.class.getClassLoader().getResourceAsStream("client.properties")) {
+					if (in != null) {
+						props.load(in);
+						System.out.println("[CONFIG] Loaded internal default client.properties");
+					} else {
+						throw new IOException("Internal client.properties could not load.");
+					}
+				}
 			}
+		} catch (IOException ioe) {
+			String errmsg = "[CONFIG] Critical error loading properties: " + ioe.getMessage();
+			ioe.printStackTrace();
+			FSClientGUI.showErrorPopup("Configuration Error", errmsg, false);
 		}
 	}
 	

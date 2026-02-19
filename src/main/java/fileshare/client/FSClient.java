@@ -14,10 +14,7 @@
  * that the user's desired functionality is achieved.
  * 
  * Initiation of the program follows these steps:
- *   TODO complete
- *   - init share server 
- *   - init connection to endpoint
- *   - init GUI
+ *   - 
  * 
  * The client program as a whole consumes a remote Web service which in turn interfaces with
  * a database that contains listings of files that are available for sharing. The Web service
@@ -64,7 +61,6 @@ public class FSClient {
 	private static ShareManager manager;
 
 	public static void main(String[] args) {
-		System.setProperty("jakarta.xml.ws.spi.Provider", "org.apache.cxf.jaxws.spi.ProviderImpl");
 		// Establish client identity and address
 		peerID = IdentityManager.getUUID();
 		String localAddress = getLocalIP();	
@@ -104,7 +100,7 @@ public class FSClient {
 		manager = new ShareManager(peerID, localAddress, localPort);
 		
 		// Configure the consumer for the remote service; this will create the port to the service
-		String endpointURL = ConfigLoader.getProperty("service.url");
+		String endpointURL = ConfigLoader.getProperty("service.address");
 		String endpointPort = ConfigLoader.getProperty("service.port");
 		FSConsumer.setEndpoint(endpointURL, endpointPort);
 		
@@ -189,12 +185,17 @@ public class FSClient {
 	 * data is written to disk properly before the process exits.
 	 */
 	public static void shutdown() {
-		// Guard against multiple concurrent calls to shutdown
+		/*
+		 * If shutdown is called from some point in the program due to a fatal error, this
+		 * method will eventually result in triggering the shutdown hook when System.exit is
+		 * called at the bottom of this method. This guards against that shutdown hook
+		 * executing this method redundantly and recursively.
+		 */
 		if (!isShuttingDown.compareAndSet(false, true)) {
 			return;
 		}
 		
-		System.out.println("[SYS] Shutting down...");
+		System.out.println("[SYS] Initiating shutdown...");
 		try {
 			// De-list all currently shared files before the client goes offline
 			FSConsumer.disconnect(peerID);
@@ -204,16 +205,28 @@ public class FSClient {
 		
 		// Stop the PeerServer thread to stop all sharing
 		if (peerServerThread != null) {
+			System.out.println("Shutting down peer server...");
 			peerServerThread.interrupt();
 		}
 
 		// Stop the share manager worker thread and save the current share directory to properties
+		System.out.println("Stopping share manager...");
 		manager.stop();
 		Path currShareDir = manager.getShareDir();
-		ConfigLoader.saveProperty("client.share_dir", currShareDir.toAbsolutePath().toString());
+		if (currShareDir != null) {
+			System.out.println("Saving share directory path to disk...");
+			ConfigLoader.saveProperty("client.share_dir", currShareDir.toAbsolutePath().toString());
+		}
 		
-		// Finally exit now that all resources have been gracefully closed
-		if (!Thread.currentThread().getName().contains("Shutdown")) {
+		/*
+		 * Ready to exit.
+		 * 
+		 * If the current thread is the shutdown hook, avoid calling System.exit since this
+		 * will be done at the end of the shutdown hook anyways. This avoids infinitely
+		 * generating shutdown hooks by further System.exit calls.
+		 */
+		System.out.println("[SYS] Shutdown complete.");
+		if (!Thread.currentThread().getName().equals("FSClient-Shutdown-Hook-Thread")) {
 			System.exit(0);
 		}
 	} // shutdown
@@ -222,9 +235,12 @@ public class FSClient {
 	 * Sets the shutdown hook
 	 */
 	private static void setShutdownHooks() {
-		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+		Thread shutdownThread = new Thread(() -> {
 			shutdown();
-		}));
+		});
+		// Set the name of the shutdown thread so that shutdown() can detect it
+		shutdownThread.setName("FSClient-Shutdown-Hook-Thread");
+		Runtime.getRuntime().addShutdownHook(shutdownThread);
 	} // setShutdownHook
 	
 }

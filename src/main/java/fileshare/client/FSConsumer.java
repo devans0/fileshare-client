@@ -16,7 +16,10 @@
 
 package fileshare.client;
 
+import java.net.URL;
 import java.util.List;
+
+import javax.xml.namespace.QName;
 
 import fileshare.generated.FileInfo;
 import fileshare.generated.FileShareService;
@@ -39,7 +42,7 @@ public class FSConsumer {
 	public static void setEndpoint(String url, String newPort) {
 		endpointURL = "http://" + url + ":" + newPort + "/FileShare_Service/FileShareService?wsdl";
 		port = null;
-	}
+	} // setEndpoint
 
 	/**
 	 * Resolves the port that corresponds to the currently configured end point.
@@ -55,11 +58,15 @@ public class FSConsumer {
 
 		if (port == null) {
 			try {
-				FileShareService service = new FileShareService();
+				// 
+				URL wsdlLocation = new URL(endpointURL);
+				QName serviceName = new QName("http://service.ws.fileshare/", "FileShareService");
+				FileShareService service = new FileShareService(wsdlLocation, serviceName);
 				port = service.getFileShareWSPort();
 
 				BindingProvider bp = (BindingProvider) port;
-				bp.getRequestContext().put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY, endpointURL);
+				String soapAddress = endpointURL.replace("?wsdl", "");
+				bp.getRequestContext().put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY, soapAddress);
 			} catch (Exception e) {
 				System.err.println("[FSConsumer] Connection error: " + e.getMessage());
 				e.printStackTrace();
@@ -68,7 +75,7 @@ public class FSConsumer {
 			}
 		}
 		return port;
-	}
+	} // getPort
 
 	/**
 	 * Wrapper for calling the listFile operation on the port for the remote
@@ -101,6 +108,10 @@ public class FSConsumer {
 	 */
 	public static void delistFile(String fileName, String peerID) {
 		FileShareWS service = getPort();
+		if (service == null) {
+			System.err.println("[FSConsumer] Cannot delistFile: service port is null");
+			return;
+		}
 		service.delistFile(fileName, peerID);
 	}
 
@@ -115,6 +126,10 @@ public class FSConsumer {
 	 */
 	public static List<FileInfo> searchFiles(String query) {
 		FileShareWS service = getPort();
+		if (service == null) {
+			System.err.println("[FSConsumer] Cannot searchFiles: service port is null");
+			return null;
+		}
 		return service.searchFiles(query);
 	}
 
@@ -131,6 +146,10 @@ public class FSConsumer {
 	 */
 	public static FileInfo getFileOwner(int fileID) {
 		FileShareWS service = getPort();
+		if (service == null) {
+			System.err.println("[FSConsumer] Cannot getFileOwner: service port is null");
+			return null;
+		}
 		return service.getFileOwner(fileID);
 	}
 
@@ -163,6 +182,10 @@ public class FSConsumer {
 	 */
 	public static boolean keepAlive(String clientID) {
 		FileShareWS service = getPort();
+		if (service == null) {
+			System.err.println("[FSConsumer] Cannot keepAlive: service port is null");
+			return true;  // return true to avoid unnecessary looping in ShareManager.syncFiles()
+		}
 		return service.keepAlive(clientID);
 	}
 
@@ -176,6 +199,11 @@ public class FSConsumer {
 	 */
 	public static void disconnect(String clientID) {
 		FileShareWS service = getPort();
+		if (service == null) {
+			System.err.println("[FSConsumer] Cannot disconnect: service port is null");
+			return;
+		}
+		System.out.println("Disconnecting from service...");
 		service.disconnect(clientID);
 	}
 

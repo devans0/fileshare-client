@@ -12,8 +12,10 @@ package fileshare.client;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,6 +24,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
+
+import fileshare.util.ShareUpdateListener;
 
 /**
  * ShareManager is responsible for managing the set of files that the user wishes to share with peers. These
@@ -61,6 +65,7 @@ public class ShareManager {
 	private final Map<String, Path> listedFiles = new ConcurrentHashMap<>();     // Files currently registered with the server
 	private final Set<Path> userSharedFiles = new HashSet<>(); 					 // Files that the user wishes to share
 	private final Set<Path> excludedFiles = new HashSet<>();   				     // Files that the user indicates not to share
+	private final List<ShareUpdateListener> listeners = new ArrayList<>();
 
 	// Concurrency controls
 	private volatile boolean changePending = false;
@@ -100,6 +105,15 @@ public class ShareManager {
 		}
 		return null;
 	} // getPathFromFileName
+	
+	/**
+	 * Returns the names of all currently listed files.
+	 * 
+	 * @return List of all paths in the current listed files set.
+	 */
+	public List<Path> getSharedFiles() {
+		return new ArrayList<Path>(listedFiles.values());
+	} // getSharedFiles
 
 	/**
 	 * Adds a file path to the set of registered files. This file will be shared
@@ -119,6 +133,7 @@ public class ShareManager {
 			return;
 		}
 		listedFiles.put(filePath.getFileName().toString(), filePath);
+		notifyListeners();
 	} // registerFile
 
 	/**
@@ -134,6 +149,7 @@ public class ShareManager {
 		try {
 			FSConsumer.delistFile(filePath.getFileName().toString(), this.peerID);
 			listedFiles.remove(filePath.getFileName().toString());
+			notifyListeners();
 		} catch (Exception e) {
 			System.err.println("[SHARE] Immediate delist failed.");
 		}
@@ -166,6 +182,25 @@ public class ShareManager {
 			}
 		}
 	} // stop
+	
+	/**
+	 * Add a new listener to the set of listeners that require notification of when the set
+	 * of listed files changes.
+	 * 
+	 * @param listener the new listener.
+	 */
+	public void addUpdateListener(ShareUpdateListener listener) {
+		this.listeners.add(listener);
+	}
+	
+	/**
+	 * Notifies each listener of the update to the listed files set.
+	 */
+	private void notifyListeners() {
+		for (ShareUpdateListener l : listeners) {
+			l.onShareListChanged();
+		}
+	}
 
 	/**
 	 * Scans each of the files in the shared directory and processes them so long as
@@ -287,8 +322,6 @@ public class ShareManager {
 						}
 					}
 					
-					System.out.println("[DEBUG] Map size: " + listedFiles.size() + " Contents: " + listedFiles.keySet());
-
 					/*
 					 * Send the heartbeat and detect if the server has lost the file listings. If
 					 * the server has reaped the listed files between heartbeats due to a delay,
@@ -308,6 +341,7 @@ public class ShareManager {
 			} while (needsRetry || changePending);
 		} finally {
 			syncLock.unlock();
+			notifyListeners();
 		}
 	} // syncDirectory
 }
