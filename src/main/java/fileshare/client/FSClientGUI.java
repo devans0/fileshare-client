@@ -205,7 +205,7 @@ public class FSClientGUI extends JFrame {
 
 		this.shareDirField = new JTextField("No directory selected");
 		this.shareDirField.setEditable(false);
-		this.browseDirBtn = new JButton("Browse...");
+		this.browseDirBtn = new JButton("Share Directory");
 		this.stopSharingDirBtn = new JButton("Unlist Directory");
 		
 		// Enable the stop sharing directory button if there is a saved share directory
