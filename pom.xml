@@ -4,36 +4,57 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>fileshare</groupId>
     <artifactId>fileshare-client</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>1.0</version>
     <name>File Share Client</name>
     <description>Simpe file sharing client that enables peer-to-peer file sharing enabled by a simple Web service.</description>
 
     <dependencies>
-            <dependency>
-                    <groupId>org.jboss.ws.cxf</groupId>
-                    <artifactId>jbossws-cxf-client</artifactId>
-                    <version>7.0.0.Final</version>
-            </dependency>
-            <dependency>
-                    <groupId>jakarta.xml.ws</groupId>
-                    <artifactId>jakarta.xml.ws-api</artifactId>
-                    <version>4.0.0</version>
-            </dependency>
-            <dependency>
-                    <groupId>org.glassfish.jaxb</groupId>
-                    <artifactId>jaxb-runtime</artifactId>
-                    <version>4.0.2</version>
-            </dependency>
-            <dependency>
-                    <groupId>jakarta.activation</groupId>
-                    <artifactId>jakarta.activation-api</artifactId>
-                    <version>2.1.1</version>
-            </dependency>
-            <dependency>
-                    <groupId>com.fasterxml.woodstox</groupId>
-                    <artifactId>woodstox-core</artifactId>
-                    <version>6.5.0</version>
-            </dependency>
+
+        <dependency>
+            <groupId>org.jboss.ws.cxf</groupId>
+            <artifactId>jbossws-cxf-client</artifactId>
+            <version>7.0.0.Final</version><exclusions>
+                <exclusion>
+                    <groupId>org.jboss.spec.jakarta.xml.soap</groupId>
+                    <artifactId>jboss-saaj-api_3.0_spec</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>jakarta.jws</groupId>
+                    <artifactId>jakarta.jws-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.xml.ws</groupId>
+            <artifactId>jakarta.xml.ws-api</artifactId>
+            <version>4.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>4.0.2</version>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.activation</groupId>
+            <artifactId>jakarta.activation-api</artifactId>
+            <version>2.1.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.woodstox</groupId>
+            <artifactId>woodstox-core</artifactId>
+            <version>6.5.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.5</version>
+        </dependency>
+
     </dependencies>
 
     <properties>
@@ -64,21 +85,46 @@
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                                     <resource>META-INF/cxf/bus-extensions.txt</resource>
                                 </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.handlers</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.schemas</resource>
+                                </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>fileshare.client.FSClient</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                                    <resources>
+                                        <resource>LICENSE</resource>
+                                        <resource>NOTICE</resource>
+                                        <resource>DEPENDENCIES</resource>
+                                        <resource>LICENSE.txt</resource>
+                                        <resource>NOTICE.txt</resource>
+                                        <resource>LICENSE.md</resource> <resource>NOTICE.md</resource>  <resource>META-INF/LICENSE.md</resource>
+                                        <resource>META-INF/NOTICE.md</resource>
+                                        <resource>META-INF/MANIFEST.MF</resource>
+                                    </resources>
                                 </transformer>
                             </transformers>
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
                                     <excludes>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/9/module-info.class</exclude>
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
                                     </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>org.bouncycastle:bcprov-jdk15on</artifact>
+                                    <excludes><exclude>**</exclude></excludes>
                                 </filter>
                             </filters>
                         </configuration>

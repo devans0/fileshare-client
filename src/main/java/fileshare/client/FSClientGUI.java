@@ -23,6 +23,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridLayout;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -63,6 +64,7 @@ public class FSClientGUI extends JFrame {
 	private JButton downloadBtn;
 	private JTextField shareDirField;
 	private JButton browseDirBtn;
+	private JButton stopSharingDirBtn;
 	private DefaultListModel<Path> sharedFilesListModel;
 	private JList<Path> sharedFilesList;
 	private JButton shareFileBtn;
@@ -204,9 +206,22 @@ public class FSClientGUI extends JFrame {
 		this.shareDirField = new JTextField("No directory selected");
 		this.shareDirField.setEditable(false);
 		this.browseDirBtn = new JButton("Browse...");
+		this.stopSharingDirBtn = new JButton("Unlist Directory");
+		
+		// Enable the stop sharing directory button if there is a saved share directory
+		// in the configuration
+		if (this.manager.getShareDir() == null) {
+			this.stopSharingDirBtn.setEnabled(false);
+		} else {
+			this.stopSharingDirBtn.setEnabled(true);
+		}
+		
+		JPanel shareDirControlsPanel = new JPanel(new GridLayout(1, 2, 5, 0));
 
 		dirPanel.add(this.shareDirField, BorderLayout.CENTER);
-		dirPanel.add(this.browseDirBtn, BorderLayout.EAST);
+		shareDirControlsPanel.add(this.browseDirBtn);
+		shareDirControlsPanel.add(this.stopSharingDirBtn);
+		dirPanel.add(shareDirControlsPanel, BorderLayout.EAST);
 		shareTab.add(dirPanel, BorderLayout.NORTH);
 
 		/*
@@ -267,8 +282,9 @@ public class FSClientGUI extends JFrame {
 
 		/* Share */
 		this.shareFileBtn.addActionListener(e -> handleShareFile());
-		this.browseDirBtn.addActionListener(e -> handleChangeShareDir());
 		this.stopSharingBtn.addActionListener(e -> handleStopSharing());
+		this.browseDirBtn.addActionListener(e -> handleChangeShareDir());
+		this.stopSharingDirBtn.addActionListener(e -> handleStopSharingDir());
 
 		this.sharedFilesList.getSelectionModel().addListSelectionListener(e -> {
 			if (!e.getValueIsAdjusting()) {
@@ -435,7 +451,7 @@ public class FSClientGUI extends JFrame {
 				System.err.println("ERROR: '" + newFile.getFileName() + "' is not readable or does not exist.");
 			}
 		}
-	}
+	} // handleShareFile
 
 	private void handleChangeShareDir() {
 		// Create a file chooser, restricted to selecting directories
@@ -452,9 +468,16 @@ public class FSClientGUI extends JFrame {
 			
 			// Update the ShareManager for the new directory
 			this.manager.setShareDir(newSharePath);
+			this.stopSharingDirBtn.setEnabled(true);
 			System.out.println("Switched sharing directory to: " + newSharePath.getFileName());
 		}
 	} // handleChangeShareDir
+	
+	private void handleStopSharingDir() {
+		this.manager.setShareDir(null);
+		this.shareDirField.setText("No directory selected");
+		this.stopSharingDirBtn.setEnabled(false);
+	} // handleStopSharingDir
 
 	private void handleStopSharing() {
 		Path filePath = this.sharedFilesList.getSelectedValue();
@@ -462,10 +485,15 @@ public class FSClientGUI extends JFrame {
 			return;
 		}
 
+		// Stop sharing the file. If the file is from a shared directory, exclude it
 		this.stopSharingBtn.setEnabled(false);
 		new Thread(() -> {
 			try {
-				this.manager.excludeFile(filePath);
+				if (this.manager.isFromSharedDir(filePath)) {
+					this.manager.excludeFile(filePath);
+				} else {
+					this.manager.delistFile(filePath);
+				}
 				System.out.println("Stopped sharing: " + filePath.getFileName());
 			} finally {
 				this.stopSharingBtn.setEnabled(false);

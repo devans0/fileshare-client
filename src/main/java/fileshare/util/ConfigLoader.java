@@ -80,7 +80,13 @@ public class ConfigLoader {
 	 * @param newVal the value of the new/updated property.
 	 */
 	public static void saveProperty(String key, String newVal) {
-		props.put(key, newVal);
+		// Handle the case where there is no set share directory
+		if (newVal == null) {
+			props.remove(key);
+		} else {
+			props.put(key, newVal);
+		}
+
 		try (OutputStream os = new FileOutputStream("client.properties")) {
 			props.store(os, "Updated by FSClient");
 		} catch (IOException ioe) {

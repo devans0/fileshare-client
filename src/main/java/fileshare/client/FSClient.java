@@ -76,7 +76,8 @@ public class FSClient {
 		 * This is only an initial configuration of the share directory as this may be changed
 		 * via the GUI at any time by the user.
 		 */
-		shareDir = Paths.get(ConfigLoader.getProperty("client.share_dir"));
+		String savedPath = ConfigLoader.getProperty("client.share_dir");
+		shareDir = (savedPath != null) ? Paths.get(savedPath) : null;
 		downloadDir = Paths.get(ConfigLoader.getProperty("client.download_dir", DEFAULT_DOWNLOAD_DIR));
 		
 		/*
@@ -97,7 +98,7 @@ public class FSClient {
 		
 		// Ensure required directories exist and create the share manager
 		initDirectories(shareDir, downloadDir);
-		manager = new ShareManager(peerID, localAddress, localPort);
+		manager = new ShareManager(peerID, localAddress, shareDir, localPort);
 		
 		// Configure the consumer for the remote service; this will create the port to the service
 		String endpointURL = ConfigLoader.getProperty("service.address");
@@ -212,12 +213,10 @@ public class FSClient {
 		// Stop the share manager worker thread and save the current share directory to properties
 		System.out.println("Stopping share manager...");
 		manager.stop();
-		Path currShareDir = manager.getShareDir();
-		if (currShareDir != null) {
-			System.out.println("Saving share directory path to disk...");
-			ConfigLoader.saveProperty("client.share_dir", currShareDir.toAbsolutePath().toString());
-		}
-		
+		Path currSharePath = manager.getShareDir();
+		String currShareDir = (currSharePath != null) ? currSharePath.toAbsolutePath().toString() : null;
+		ConfigLoader.saveProperty("client.share_dir", currShareDir);
+
 		/*
 		 * Ready to exit.
 		 * 

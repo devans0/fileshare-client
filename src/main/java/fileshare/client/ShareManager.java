@@ -26,6 +26,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 import fileshare.util.ShareUpdateListener;
+import jakarta.xml.ws.WebServiceException;
 
 /**
  * ShareManager is responsible for managing the set of files that the user wishes to share with peers. These
@@ -71,9 +72,10 @@ public class ShareManager {
 	private volatile boolean changePending = false;
 	private final ReentrantLock syncLock = new ReentrantLock();
 
-	public ShareManager(String peerID, String localAddress, int localPort) {
+	public ShareManager(String peerID, String localAddress, Path shareDir, int localPort) {
 		this.peerID = peerID;
 		this.localAddress = localAddress;
+		this.shareDir = shareDir;
 		this.localPort = localPort;
 	} // ctor
 
@@ -82,16 +84,59 @@ public class ShareManager {
 		return this.shareDir;
 	}
 
-	// shareDir setter
-	public void setShareDir(Path shareDir) {
-		this.shareDir = shareDir;
-		this.changePending = true;
+	/**
+	 * Set the share directory. If there are any files in the exclude files set that
+	 * are in a newly-set shared directory then those files will be removed from the
+	 * excluded set. This avoids the situation in which a user excludes a file and
+	 * then chooses to share the directory it resides in. Having only some of the
+	 * files appear in the newly-shared directory will appear to be an error and
+	 * will also require the user to manually re-add any previously excluded files.
+	 * 
+	 * @param newShareDir the Path to the new shared directory; may be null to stop
+	 *                 sharing any directories.
+	 */
+	public void setShareDir(Path newShareDir) {
+		// De-list all files in the current share directory
+		if (this.shareDir != null && Files.exists(this.shareDir)) {
+			try (Stream<Path> stream = Files.list(this.shareDir)){
+				
+				stream.filter(Files::isRegularFile)
+					  .forEach(p -> {
+						  userSharedFiles.remove(p);
+						  excludedFiles.remove(p);
+						  delistFile(p);
+					  });
+			} catch (IOException ioe) {
+				System.err.println("[SHARE] Error de-listing directory: " + ioe.getMessage());
+			}
+		}
+		
+		// Set the new directory; may be null indicating that the directory was unset
+		this.shareDir = newShareDir;
+
+		// Remove files in the new directory from the excluded list if it exists
+		if(this.shareDir != null && Files.exists(this.shareDir)) {
+			try (Stream<Path> stream = Files.list(this.shareDir)) {
+				stream.filter(Files::isRegularFile).filter(p->{
+					try {
+						return !Files.isHidden(p);
+					} catch (IOException ioe) {
+						return false;
+					}
+				}).forEach(excludedFiles::remove);
+			} catch (IOException ioe) {
+				System.err.println("[SHARE] set share directory error: " + ioe.getMessage());
+			}
+		}
 		// Sync files immediately if shareDir changes
+		// Indicate that there is a change pending in case another thread has syncFiles locked
+		this.changePending = true;
 		new Thread(() -> {
-			System.out.println("[Manager] New share directory: " + shareDir + " synchronizing files...");
+			String msg = (this.shareDir == null) ? "Unset share directory." : "New directory: " + this.shareDir;
+			System.out.println("[SHARE] " + msg + " Synchronizing shared files...");
 			syncFiles();
 		}).start();
-	}
+	} // setShareDir
 	
 	/**
 	 * Search the hash map to find a file that is being shared according to its name.
@@ -114,6 +159,22 @@ public class ShareManager {
 	public List<Path> getSharedFiles() {
 		return new ArrayList<Path>(listedFiles.values());
 	} // getSharedFiles
+	
+	/**
+	 * Test whether the supplied filePath is in the shared directory or not.
+	 * 
+	 * @param filePath the path to the file in question.
+	 * @return true if the file is in the shared directory; false otherwise
+	 */
+	public boolean isFromSharedDir(Path filePath) {
+		if (this.shareDir == null || filePath == null) {
+			return false;
+		}
+		// Normalize to be certain of a fair comparison
+		Path normShareDir = this.shareDir.normalize();
+		Path normFilePath = filePath.normalize();
+		return normFilePath.startsWith(normShareDir);
+	} // isFromSharedDir
 
 	/**
 	 * Adds a file path to the set of registered files. This file will be shared
@@ -135,6 +196,22 @@ public class ShareManager {
 		listedFiles.put(filePath.getFileName().toString(), filePath);
 		notifyListeners();
 	} // registerFile
+	
+	/**
+	 * Stops sharing a file immediately and notifies the GUI of the change.
+	 * 
+	 * @param filePath the file that should no longer be shared.
+	 */
+	public void delistFile(Path filePath) {
+		userSharedFiles.remove(filePath);
+		try {
+			FSConsumer.delistFile(filePath.getFileName().toString(), this.peerID);
+			listedFiles.remove(filePath.getFileName().toString());
+			notifyListeners();
+		} catch (Exception e) {
+			System.err.println("[SHARE] Immediate delist failed.");
+		}
+	} // delistFile
 
 	/**
 	 * Indicates that a file should not be shared by block-listing its file path.
@@ -144,15 +221,8 @@ public class ShareManager {
 	 * @param filePath the path of the file that is not to be shared.
 	 */
 	public void excludeFile(Path filePath) {
-		userSharedFiles.remove(filePath);
 		excludedFiles.add(filePath);
-		try {
-			FSConsumer.delistFile(filePath.getFileName().toString(), this.peerID);
-			listedFiles.remove(filePath.getFileName().toString());
-			notifyListeners();
-		} catch (Exception e) {
-			System.err.println("[SHARE] Immediate delist failed.");
-		}
+		delistFile(filePath);
 	} // excludeFile
 
 	/**
@@ -261,7 +331,7 @@ public class ShareManager {
 					 * files intended for sharing
 					 */
 					if (this.shareDir != null && Files.exists(this.shareDir)) {
-						try (Stream<Path> stream = Files.list(shareDir)) {
+						try (Stream<Path> stream = Files.list(this.shareDir)) {
 							stream.filter(Files::isRegularFile).filter(p -> {
 								try {
 									return !Files.isHidden(p);
@@ -337,6 +407,8 @@ public class ShareManager {
 				} catch (IOException ioe) {
 					System.err.println("[SHARE] Directory sync error " + ioe.getMessage());
 					ioe.printStackTrace();
+				} catch (WebServiceException we) {
+					System.err.println("[SHARE] Error connecting the the service: " + we.getMessage());
 				}
 			} while (needsRetry || changePending);
 		} finally {
