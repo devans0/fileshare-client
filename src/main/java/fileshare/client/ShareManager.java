@@ -14,9 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -24,6 +24,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
+
+import javax.swing.SwingUtilities;
 
 import fileshare.util.ShareUpdateListener;
 import jakarta.xml.ws.WebServiceException;
@@ -63,9 +65,9 @@ public class ShareManager {
 	private final String localAddress;
 	private final int localPort;
 	private ScheduledExecutorService scheduler;
-	private final Map<String, Path> listedFiles = new ConcurrentHashMap<>();     // Files currently registered with the server
-	private final Set<Path> userSharedFiles = new HashSet<>(); 					 // Files that the user wishes to share
-	private final Set<Path> excludedFiles = new HashSet<>();   				     // Files that the user indicates not to share
+	private final Map<Integer, Path> listedFiles = new ConcurrentHashMap<>();  // Files currently registered with the server
+	private final Set<Path> userSharedFiles = new HashSet<>(); 				   // Files that the user wishes to share
+	private final Set<Path> excludedFiles = new HashSet<>();   				   // Files that the user indicates not to share
 	private final List<ShareUpdateListener> listeners = new ArrayList<>();
 
 	// Concurrency controls
@@ -132,21 +134,22 @@ public class ShareManager {
 		// Indicate that there is a change pending in case another thread has syncFiles locked
 		this.changePending = true;
 		new Thread(() -> {
-			String msg = (this.shareDir == null) ? "Unset share directory." : "New directory: " + this.shareDir;
+			String msg = (this.shareDir == null) ? "Unset share directory." : "New share directory: " + this.shareDir;
 			System.out.println("[SHARE] " + msg + " Synchronizing shared files...");
 			syncFiles();
 		}).start();
 	} // setShareDir
 	
 	/**
-	 * Search the hash map to find a file that is being shared according to its name.
+	 * Search the hash map to find a file that is being shared according to its
+	 * name.
 	 * 
-	 * @param fileName the name of the desired file
+	 * @param fileID the ID of the desired file
 	 * @return Path of the file if it exists in the map; null otherwise
 	 */
-	public Path getPathFromFileName(String fileName) {
-		if (listedFiles.containsKey(fileName)) {
-			return listedFiles.get(fileName);
+	public Path getFilePath(int fileID) {
+		if (listedFiles.containsKey(fileID)) {
+			return listedFiles.get(fileID);
 		}
 		return null;
 	} // getPathFromFileName
@@ -185,28 +188,51 @@ public class ShareManager {
 	 * @param filePath the path of the file to be included for sharing.
 	 */
 	public void listFile(Path filePath) {
+		// Web service policy: no files with the same name from the same host
+		String fileName = filePath.getFileName().toString();
+		boolean nameConflict = listedFiles.values().stream().anyMatch(path -> path.getFileName().toString().equals(fileName));
+		if (nameConflict) {
+			System.err.println("[SHARE] Name conflict on " + fileName + ". Skipping.");
+			return;
+		}
+		
 		excludedFiles.remove(filePath);
 		userSharedFiles.add(filePath);
+		int fileID;
 		try {
-			FSConsumer.listFile(this.peerID, filePath.getFileName().toString(), this.localAddress, this.localPort);
+			fileID = FSConsumer.listFile(this.peerID, filePath.getFileName().toString(), this.localAddress, this.localPort);
+			System.out.println("Started sharing: " + fileName);
 		} catch (Exception e) {
 			System.err.println("[SHARE] Register file failed: " + e.getMessage());
 			return;
 		}
-		listedFiles.put(filePath.getFileName().toString(), filePath);
+		listedFiles.put(fileID, filePath);
 		notifyListeners();
 	} // registerFile
 	
 	/**
 	 * Stops sharing a file immediately and notifies the GUI of the change.
 	 * 
+	 * Note: this method accepts paths only due to a design error. Changing this
+	 * interface would have cascading effects for other components, namely the GUI.
+	 * 
 	 * @param filePath the file that should no longer be shared.
 	 */
 	public void delistFile(Path filePath) {
+		int fileID = -1;
+		for (Entry<Integer, Path> entry : listedFiles.entrySet()) {
+			if (entry.getValue().equals(filePath)) {
+				fileID = entry.getKey();
+			}
+		}
+		// The provided path is not in the set of listed files
+		if (fileID < 0) {
+			return;
+		}
 		userSharedFiles.remove(filePath);
 		try {
-			FSConsumer.delistFile(filePath.getFileName().toString(), this.peerID);
-			listedFiles.remove(filePath.getFileName().toString());
+			FSConsumer.delistFile(fileID, this.peerID);
+			listedFiles.remove(fileID);
 			notifyListeners();
 		} catch (Exception e) {
 			System.err.println("[SHARE] Immediate delist failed.");
@@ -218,9 +244,22 @@ public class ShareManager {
 	 * Block listing is required to allow the user to stop sharing files that are in
 	 * a configured share directory if they wish.
 	 * 
-	 * @param filePath the path of the file that is not to be shared.
+	 * Note: this method accepts paths only due to a design error. Changing this
+	 * interface would have cascading effects for other components, namely the GUI.
+	 * 
+	 * @param fileID the ID of the file that is not to be shared.
 	 */
 	public void excludeFile(Path filePath) {
+		int fileID = -1;
+		for (Entry<Integer, Path> entry : listedFiles.entrySet()) {
+			if (entry.getValue().equals(filePath)) {
+				fileID = entry.getKey();
+			}
+		}
+		// File not actually listed
+		if (fileID < 0) {
+			return;
+		}
 		excludedFiles.add(filePath);
 		delistFile(filePath);
 	} // excludeFile
@@ -324,11 +363,13 @@ public class ShareManager {
 				needsRetry = false;
 				changePending = false;
 				try {
+					// The set of files that the user intends to share at the point of synchronization.
+					// By the end of the sync operation, all of these files should be shared with the server.
 					Set<Path> intendedFiles = new HashSet<>();
 
 					/*
-					 * Add any regular files present in a configured share directory to the set of
-					 * files intended for sharing
+					 * Add any regular files present in a the share directory to the set of files
+					 * intended for sharing
 					 */
 					if (this.shareDir != null && Files.exists(this.shareDir)) {
 						try (Stream<Path> stream = Files.list(this.shareDir)) {
@@ -341,6 +382,13 @@ public class ShareManager {
 							}).forEach(intendedFiles::add);
 						}
 					}
+					
+					// Detect that the path for the share directory no longer exists
+					// Note: This will cause a re-sync
+					if (this.shareDir != null && !Files.exists(this.shareDir)) {
+						System.out.println("[SHARE] Share directory lost.");
+						setShareDir(null);
+					}
 
 					/*
 					 * intendedFiles is the union of files in the share directory and files
@@ -349,48 +397,56 @@ public class ShareManager {
 					intendedFiles.addAll(listedFiles.values());
 					intendedFiles.addAll(userSharedFiles);
 					intendedFiles.removeAll(excludedFiles);
+					
+					// Check for any files in the intended share that do not exist; this can 
+					// occur when the file has been moved or deleted
+					intendedFiles.removeIf(p -> {
+						if (!Files.exists(p)) {
+							userSharedFiles.remove(p);
+							return true;
+						}
+						return false;
+					});
 
-					/* Share any files that are intended for sharing but are not currently listed */
+					/* List any arriving files (those that are intended but not listed) */
 					for (Path p : intendedFiles) {
+						// File already listed
+						if (listedFiles.containsValue(p)) {
+							continue;
+						}
+						
+						// Web service policy: no duplicate file names from the same peer
 						String fileName = p.getFileName().toString();
-						Path currentPath = listedFiles.get(fileName);
-
-						// Check if a file with the same name is already in the map
-						// If its already in the map, replace it
-						if (currentPath == null || !currentPath.equals(p)) {
-							if (currentPath != null) {
-								try {
-									FSConsumer.delistFile(fileName, this.peerID);
-								} catch (Exception e) {
-									/* Best effort made */
-								}
-							}
-
-							// List the new or updated path
-							if (!listedFiles.containsKey(fileName) || !listedFiles.get(fileName).equals(p)) {
-								FSConsumer.listFile(this.peerID, p.getFileName().toString(), this.localAddress,
-										this.localPort);
-								listedFiles.put(p.getFileName().toString(), p);
-								System.out.println("[SHARE] Registered " + p + " with service.");
-							}
+						boolean nameConflict = listedFiles.values().stream()
+														  .anyMatch(path -> path.getFileName().toString().equals(fileName));
+						if (nameConflict) {
+							System.err.println("[SHARE] Name conflict on " + fileName + ". Skipping.");
+							continue;
 						}
+						
+						// File intended but not listed
+						int fileID = FSConsumer.listFile(this.peerID, fileName, this.localAddress, this.localPort);
+						if (fileID < 0) {
+							System.err.println("[SHARE] Failed to list: " + fileName + ": " + p);
+							continue;
+						}
+						listedFiles.put(fileID, p);
 					}
 
-					/* De-list any departing files (those that are listed but no longer intended) */
-					Iterator<Map.Entry<String, Path>> it = listedFiles.entrySet().iterator();
-					while (it.hasNext()) {
-						Map.Entry<String, Path> entry = it.next();
-						Path p = entry.getValue();
-						String fileName = entry.getKey();
-
-						if (!intendedFiles.contains(p) || !Files.isReadable(p)) {
-							FSConsumer.delistFile(fileName, this.peerID);
-							// Need to remove the file from intendedFiles if it is unreadable
-							intendedFiles.remove(p);
-							it.remove();
-							System.out.println("[SHARE] De-listed " + p);
+					/* De-list any departing files (those that are listed but no longer marked for sharing) */
+					listedFiles.entrySet().removeIf(entry -> {
+						if (!intendedFiles.contains(entry.getValue())) {
+							try {
+								FSConsumer.delistFile(entry.getKey(), this.peerID);
+								System.out.println("[SHARE] De-listed: " + entry.getValue());
+								return true;
+							} catch (Exception e) {
+								System.err.println("[SHARE] Failed to de-list " + entry.getValue());
+								return false;
+							}
 						}
-					}
+						return false;
+					});
 					
 					/*
 					 * Send the heartbeat and detect if the server has lost the file listings. If
@@ -406,9 +462,15 @@ public class ShareManager {
 
 				} catch (IOException ioe) {
 					System.err.println("[SHARE] Directory sync error " + ioe.getMessage());
-					ioe.printStackTrace();
-				} catch (WebServiceException we) {
-					System.err.println("[SHARE] Error connecting the the service: " + we.getMessage());
+				}  catch (WebServiceException we) {
+					String msg = (we.getCause() instanceof java.net.ConnectException)
+							? "Service unreachable. Restart client to attempt reconnect."
+							: "Service Error: " + we.getMessage();
+					System.err.println("[SHARE] " + msg);
+					SwingUtilities.invokeLater(() -> {
+						FSClientGUI.showErrorPopup("Service Offline", msg, false);
+					});
+					scheduler.shutdown();
 				}
 			} while (needsRetry || changePending);
 		} finally {

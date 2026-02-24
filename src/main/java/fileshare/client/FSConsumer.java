@@ -25,6 +25,7 @@ import fileshare.generated.FileInfo;
 import fileshare.generated.FileShareService;
 import fileshare.generated.FileShareWS;
 import jakarta.xml.ws.BindingProvider;
+import jakarta.xml.ws.WebServiceException;
 
 public class FSConsumer {
 
@@ -69,9 +70,9 @@ public class FSConsumer {
 				bp.getRequestContext().put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY, soapAddress);
 			} catch (Exception e) {
 				System.err.println("[FSConsumer] Connection error: " + e.getMessage());
-				e.printStackTrace();
 				String errmsg = "[FSConsumer] Failed to connect to service at " + endpointURL; 
 				FSClientGUI.showErrorPopup("Connection Failed", errmsg, false);
+				return null;
 			}
 		}
 		return port;
@@ -88,32 +89,41 @@ public class FSConsumer {
 	 * @param ownerIP   the IP address of the local client.
 	 * @param ownerPort the port over which peer file transfers will occur.
 	 */
-	public static void listFile(String ownerID, String fileName, String ownerIP, int ownerPort) {
+	public static int listFile(String ownerID, String fileName, String ownerIP, int ownerPort) {
 		FileShareWS service = getPort();
 		if (service == null) {
 			System.err.println("[FSConsumer] Cannot listFile: service port is null.");
-			return;
+			return -1;
 		}
-		service.listFile(ownerID, fileName, ownerIP, ownerPort);
-	}
+		try {
+			return service.listFile(ownerID, fileName, ownerIP, ownerPort);
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] list failed: Service unavailable.");
+			return -1;
+		}
+	} // listFile
 
 	/**
 	 * Wrapper for calling the delist file operation on the port for the remote
 	 * service. This operation removes a file from the database, indicating that it
 	 * is no longer available for sharing.
 	 * 
-	 * @param fileName the name of the file that is no longer being shared.
-	 * @param peerID   the UUID of the client which serves as a stamp of ownership
-	 *                 on the file.
+	 * @param fileID the ID of the file that is no longer being shared.
+	 * @param peerID the UUID of the client which serves as a stamp of ownership on
+	 *               the file.
 	 */
-	public static void delistFile(String fileName, String peerID) {
+	public static void delistFile(int fileID, String peerID) {
 		FileShareWS service = getPort();
 		if (service == null) {
 			System.err.println("[FSConsumer] Cannot delistFile: service port is null");
 			return;
 		}
-		service.delistFile(fileName, peerID);
-	}
+		try {
+			service.delistFile(fileID, peerID);
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] de-list failed: Service unavailable.");
+		}
+	} // delistFile
 
 	/**
 	 * Interacts with the remote Web service to perform a search of the database of
@@ -130,8 +140,13 @@ public class FSConsumer {
 			System.err.println("[FSConsumer] Cannot searchFiles: service port is null");
 			return null;
 		}
-		return service.searchFiles(query);
-	}
+		try {
+			return service.searchFiles(query);
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] search failed: Service unavailable.");
+			return null;
+		}
+	} //searchFiles
 
 	/**
 	 * Wrapper for calling the getFileOwner operation on the port for the remote
@@ -150,8 +165,13 @@ public class FSConsumer {
 			System.err.println("[FSConsumer] Cannot getFileOwner: service port is null");
 			return null;
 		}
-		return service.getFileOwner(fileID);
-	}
+		try {
+			return service.getFileOwner(fileID);
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] get file owner failed: Service unavailble.");
+			return null;
+		}
+	} // getFileOnwer
 
 	/**
 	 * Wrapper for calling the getTTL operation on the port for the remote service.
@@ -168,8 +188,13 @@ public class FSConsumer {
 			System.err.println("[FSConsumer] Cannot get TTL: service port is null.");
 			return 60;
 		}
-		return service.getTTL();
-	}
+		try {
+			return service.getTTL();
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] get TTL failed: Service unavailable.");
+			return 60;
+		}
+	} // getTTL
 
 	/**
 	 * Wrapper for calling the keepAlive operation on the port for the remote
@@ -186,8 +211,13 @@ public class FSConsumer {
 			System.err.println("[FSConsumer] Cannot keepAlive: service port is null");
 			return true;  // return true to avoid unnecessary looping in ShareManager.syncFiles()
 		}
-		return service.keepAlive(clientID);
-	}
+		try {
+			return service.keepAlive(clientID);
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] keep alive failed: Service is unavailable.");
+			return true;
+		}
+	} // keepAlive
 
 	/**
 	 * Wrapper for calling the disconnect operation on the port for the remote
@@ -204,7 +234,11 @@ public class FSConsumer {
 			return;
 		}
 		System.out.println("Disconnecting from service...");
-		service.disconnect(clientID);
-	}
+		try {
+			service.disconnect(clientID);
+		} catch (WebServiceException we) {
+			System.err.println("[FSConsumer] disconnect failed: Service unavailable.");
+		}
+	} // disconnect
 
 }

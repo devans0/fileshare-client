@@ -22,6 +22,7 @@ import fileshare.generated.FileInfo;
 public class FileRequester {
 	
 	public static void downloadFile (FileInfo info, Path downloadDir) {
+		int targetFileID = info.getFileID();
 		String targetFileName = info.getFileName();
 		String targetIP = info.getOwnerIP();
 		int targetPort = info.getPort();
@@ -43,7 +44,8 @@ public class FileRequester {
 			 DataOutputStream out = new DataOutputStream(sock.getOutputStream());
 			 DataInputStream in = new DataInputStream(sock.getInputStream())) {
 			
-			// Request the file by its name
+			// Request the file by name and ID
+			out.writeInt(targetFileID);
 			out.writeUTF(targetFileName);
 			out.flush();
 

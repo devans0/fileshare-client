@@ -49,6 +49,7 @@ import javax.swing.JScrollPane;
 
 import fileshare.generated.FileInfo;
 import fileshare.transport.FileRequester;
+import jakarta.xml.ws.WebServiceException;
 
 public class FSClientGUI extends JFrame {
 
@@ -377,6 +378,8 @@ public class FSClientGUI extends JFrame {
 						}
 					}
 				});
+			} catch(WebServiceException we) {
+				System.err.println("Search could not connect to the remote service.");
 			} catch (Exception e) {
 				System.err.println("[ERROR] Search failed " + e.getMessage());
 			} finally {
@@ -398,7 +401,6 @@ public class FSClientGUI extends JFrame {
 		 * table.
 		 */
 		String fileIDStr = this.searchTableModel.getValueAt(row, 0).toString();
-		String fileNameStr = this.searchTableModel.getValueAt(row, 1).toString();
 		if (fileIDStr.equals("N/A")) {
 			return;
 		}
@@ -412,10 +414,11 @@ public class FSClientGUI extends JFrame {
 				// Parse the file ID from the table
 				int fID = Integer.parseInt(fileIDStr);
 				FileInfo finfo = FSConsumer.getFileOwner(fID);
-
+				
 				// Download the file
 				if (finfo != null) {
-					System.out.println("Requesting " + fileNameStr);
+					String fileName = finfo.getFileName();
+					System.out.println("Requesting " + fileName);
 					FileRequester.downloadFile(finfo, this.downloadDir);
 				} else {
 					System.err.println( "[ERROR] Could not retrieve owner details for file '" + 
@@ -442,13 +445,16 @@ public class FSClientGUI extends JFrame {
 		int result = chooser.showOpenDialog(this);
 		if (result == JFileChooser.APPROVE_OPTION) {
 			// List the file with the share manager
-			Path newFile = chooser.getSelectedFile().toPath();
-			// Be certain the file is readable
-			if (Files.isReadable(newFile)) {
-				this.manager.listFile(newFile);
-				System.out.println("Started sharing: " + newFile.getFileName());
-			} else {
-				System.err.println("ERROR: '" + newFile.getFileName() + "' is not readable or does not exist.");
+			try {
+				Path newFile = chooser.getSelectedFile().toPath();
+				// Be certain the file is readable
+				if (Files.isReadable(newFile)) {
+					this.manager.listFile(newFile);
+				} else {
+					System.err.println("ERROR: '" + newFile.getFileName() + "' is not readable or does not exist.");
+				}
+			} catch (WebServiceException we) {
+				System.err.println("Share error: could not connect to the remote service.");
 			}
 		}
 	} // handleShareFile

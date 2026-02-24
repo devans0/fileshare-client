@@ -54,11 +54,12 @@ public class FileTransferHandler implements Runnable {
 			 OutputStream out = s.getOutputStream()) {
 				 
 			// Receive the filename from the requesting peer
+			int fileID = in.readInt();
 			String fileName = in.readUTF();
 
 			// Resolve the Path ensuring that there are no unsafe character sequences
 			// and that the file request has sharDir as a prefix
-			Path targetFile = shareManager.getPathFromFileName(fileName);
+			Path targetFile = shareManager.getFilePath(fileID);
 			
 			/* 
 			 * If the file does not exist in the share list, if that file is not readable or is a directory
